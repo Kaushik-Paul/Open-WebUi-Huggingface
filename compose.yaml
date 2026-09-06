@@ -1,0 +1,11 @@
+services:
+  webui:
+    build: .
+    ports:
+      - "127.0.0.1:7860:7860"
+    env_file: .env
+    volumes:
+      - webui-data:/app/backend/data
+    restart: unless-stopped
+volumes:
+  webui-data:

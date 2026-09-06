@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-06",
+  "results": [
+    {
+      "operation": "streaming chat",
+      "model": "openai-gpt-oss-120b",
+      "status": 200,
+      "sse_done": false,
+      "request_id": "01M1TVVPGPDPSFVAKYBJ64DRQC"
+    },
+    {
+      "operation": "image generation",
+      "model": "venice-z-image-turbo",
+      "status": 200,
+      "images": 1,
+      "bytes": [
+        214951
+      ]
+    },
+    {
+      "operation": "image edit",
+      "model": "grok-imagine-edit",
+      "status": 400,
+      "error": "HTTPException",
+      "detail": "Provider request failed; check model availability and settings"
+    },
+    {
+      "operation": "streaming chat",
+      "model": "gpt-4o-mini",
+      "status": 200,
+      "sse_done": true,
+      "content_type": "text/event-stream",
+      "sse_events": 5,
+      "text_delta_present": true,
+      "request_id": "01M1TX1F2S5CFE04T13QN5Y72V"
+    },
+    {
+      "operation": "image edit without size",
+      "model": "grok-imagine-edit",
+      "status": 200,
+      "images": 1,
+      "request_id": "01M1TVZ74YC5PGPHD36M5NC6TY"
+    }
+  ]
+}

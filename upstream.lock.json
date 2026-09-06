@@ -1,0 +1,35 @@
+{
+  "release": "v0.11.3",
+  "commit": "2a960a59fe1dbbd35282f0556b3666d81102e781",
+  "archive_url": "https://codeload.github.com/open-webui/open-webui/tar.gz/2a960a59fe1dbbd35282f0556b3666d81102e781",
+  "sha256": "1842400661ba42eaa3e20d27dbae41468f3db0a664a4bfa0c73c796325ae40e9",
+  "customized_files": [
+    "backend/open_webui/config.py",
+    "backend/open_webui/env.py",
+    "backend/open_webui/events.py",
+    "backend/open_webui/main.py",
+    "backend/open_webui/models/config.py",
+    "backend/open_webui/routers/images.py",
+    "backend/open_webui/routers/openai.py",
+    "backend/open_webui/routers/pipelines.py",
+    "backend/open_webui/utils/anthropic.py",
+    "src/app.html",
+    "src/lib/apis/auths/index.ts",
+    "src/lib/apis/images/index.ts",
+    "src/lib/components/AddConnectionModal.svelte",
+    "src/lib/components/admin/Settings/Images.svelte",
+    "src/routes/+layout.svelte",
+    "src/routes/auth/+page.svelte"
+  ],
+  "added_files": [
+    "backend/open_webui/utils/secret_refs.py",
+    "backend/open_webui/utils/private_deployment.py",
+    "backend/open_webui/utils/provider_http.py",
+    "backend/open_webui/utils/surplus_images.py",
+    "src/lib/utils/rememberedLogin.ts"
+  ],
+  "build_images": {
+    "node": "node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90",
+    "python": "python:3.11.13-slim-bookworm@sha256:86adf8dbadc3d6e82ee5dd2c74bec2e1c2467cdad47886280501df722372d2e1"
+  }
+}
