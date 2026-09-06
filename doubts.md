@@ -4,10 +4,10 @@ Please add answers below the relevant item. Implementation continues with the do
 
 1. **Durable Space storage:** Which PostgreSQL database and private S3-compatible upload bucket should the Space use? Local Docker uses a named volume. No external infrastructure has been provisioned; Space durability requires these choices and a recreation/restore test.
 
-   Answer:
+   Answer: We can use huggingface own bucket, since I have huggingface pro subscription
 
 2. **Preferred models:** Which Surplus chat, image-generation, and image-edit models do you want as defaults? The UI discovers live capability metadata and accepts exact manual IDs. Image generation/editing start disabled until configured to avoid silently choosing a billable model.
 
-   Answer:
+   Answer: For text keep `deepseek-v4-flash-0731`, for image generation keep `venice-gpt-image-2`
 
 Resolved: only `SURPLUS_API_KEY` is supported as an environment credential reference, per your follow-up. The existing `.env` has been preserved.
