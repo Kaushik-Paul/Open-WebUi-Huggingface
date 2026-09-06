@@ -30,6 +30,18 @@ Changing `WEBUI_ADMIN_PASSWORD` does not reset an existing account. While logged
 
 ## Spaces
 
-Create a Docker Space from this repository. Add the `.env.example` secret values as Space Secrets and configuration values as Space Variables; set `WEBUI_URL` to the Space origin. Use external PostgreSQL and durable upload storage for durable use. The default container filesystem is ephemeral on Spaces; a directory named `/data` does not make it durable. No Hugging Face access token is required for injected Secrets.
+The authenticated `hf` CLI is enough. The helper creates a **private** Docker Space, uploads Git-visible files (never `.env`), and copies owner configuration from the local `.env` into Space Secrets and Variables without printing values. It sets `WEBUI_URL` to the Space origin.
+
+```sh
+# From an environment that has huggingface_hub, for example the hf CLI:
+#   /home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py
+python3 main/scripts/deploy_space.py --dry-run
+python3 main/scripts/deploy_space.py
+python3 main/scripts/deploy_space.py --skip-env   # later code-only updates
+```
+
+The helper builds the Svelte frontend locally, then uploads `main/frontend-dist` so Hugging Face does not run the memory-heavy Vite build. Re-run after frontend changes so the Space stays in sync. Local `docker compose` still compiles from source unless that dist directory contains `index.html` (delete it to force a local frontend rebuild).
+
+Default Space: `kaushikpaul/Open-WebUI-Surplus` (override with `--repo-id` or `HF_SPACE_ID`). Use external PostgreSQL and durable upload storage for durable use. The default container filesystem is ephemeral on Spaces; a directory named `/data` does not make it durable. No Hugging Face access token is required for injected Secrets.
 
 See [deployment and recovery](main/docs/deployment.md), [Surplus setup](main/docs/surplus.md), [customizations and upgrades](main/docs/customization.md), [request-path audit](main/docs/request-path-audit.md), and [verification results](main/docs/verification.md). Agent/maintainer rules, including when not to add tests, are in [AGENTS.md](AGENTS.md).

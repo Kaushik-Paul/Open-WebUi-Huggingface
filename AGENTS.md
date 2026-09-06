@@ -4,7 +4,7 @@ This repository vendors Open WebUI for a single owner on a Hugging Face Docker S
 
 Read `README.md`, `main/docs/customization.md`, `main/docs/verification.md`, and `main/docs/request-path-audit.md` before changing behavior. Put unresolved product or deployment questions in root `doubts.md` and continue independent work. Do not re-implement the plan, add a parallel Open WebUI, or expand scope into audio, search, video, music, or extra job UIs.
 
-Remaining gaps are owner decisions in `doubts.md` (Space PostgreSQL/S3, preferred models) and optional live Space acceptance. Those are not coding tasks. Do not provision, purchase, or deploy a Space unless the user explicitly authorizes it.
+Remaining gaps are owner decisions in `doubts.md` (Space PostgreSQL/S3, preferred models). Do not provision or purchase databases, buckets, or paid Space hardware unless the user explicitly authorizes it. Space deploys use `main/scripts/deploy_space.py` only.
 
 ## Layout and provenance
 
@@ -39,7 +39,9 @@ Only extend an existing test file when the change actually alters one of these s
 
 If the change does not affect those surfaces, run nothing new and do not invent fixtures. Prefer updating an existing test over adding a file. Fixture checks use a dedicated mock provider and owner, never the user's `.env`.
 
-Do not add scripts unless there is a documented operational gap that `entrypoint.sh`, `check_upstream.py`, `reset_owner_password.py`, `run_fixture.sh`, `run_local.py`, or `smoke_surplus.py` cannot cover. The Docker image must contain only `entrypoint.sh` and `reset_owner_password.py`. Do not add new `main/docs/` files for small edits; update the existing doc that already covers the topic.
+Do not add scripts unless there is a documented operational gap that `entrypoint.sh`, `check_upstream.py`, `reset_owner_password.py`, `run_fixture.sh`, `run_local.py`, `smoke_surplus.py`, or `deploy_space.py` cannot cover. The Docker image must contain only `entrypoint.sh` and `reset_owner_password.py`. Do not add new `main/docs/` files for small edits; update the existing doc that already covers the topic.
+
+`deploy_space.py` is the Hugging Face upload path. Never print, log, or commit `.env` or Space secret values. Default Space id is `HF_SPACE_ID` or `{hf-username}/Open-WebUI-Surplus`, created private. Re-run the same script after code changes; pass `--skip-env` for a code-only update. Do not add a second deploy helper.
 
 ## Development and checks
 
