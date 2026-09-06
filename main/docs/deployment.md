@@ -41,7 +41,7 @@ S3_KEY_PREFIX=open-webui/
 
 Supply credential-bearing values through Space Secrets, require TLS according to the database provider's connection instructions, and keep the bucket private. The native authenticated file-content API retrieves stored files; do not publish private uploads to support edits. External PostgreSQL alone does not preserve image bytes. Bucket/FUSE mounts are not accepted SQLite storage unless locking/atomic writes are explicitly verified. Ephemeral SQLite is demo mode only.
 
-Set `WEBUI_URL=https://YOUR-SPACE.hf.space` and `WEBUI_AUTH_COOKIE_SECURE=true`. Test the actual origin's cookies/localStorage, SSE through the Space proxy, Socket.IO reconnect, and UID permissions. No Space, database, bucket, or paid hardware is provisioned by this repository.
+Set `WEBUI_URL=https://YOUR-SPACE.hf.space` and `WEBUI_AUTH_COOKIE_SECURE=true`. Test the actual origin's cookies/localStorage, SSE through the Space proxy, Socket.IO reconnect, and UID permissions. `main/scripts/deploy_space.py` creates or updates the Docker Space, builds the frontend locally, uploads Git-visible files plus `main/frontend-dist`, and applies `.env` as Secrets/Variables without printing values. Hugging Face `cpu-basic` builders OOM on the in-cluster Vite build; the uploaded dist skips that step. The script does not provision PostgreSQL, object storage, or paid hardware. Space disk remains ephemeral until those are configured.
 
 ## Password recovery and sessions
 

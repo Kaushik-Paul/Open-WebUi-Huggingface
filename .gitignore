@@ -378,4 +378,6 @@ $RECYCLE.BIN/
 **/playwright-report/
 **/*.log
 main/.local-data/
+main/frontend-dist/**
+!main/frontend-dist/.gitkeep
 backups/
