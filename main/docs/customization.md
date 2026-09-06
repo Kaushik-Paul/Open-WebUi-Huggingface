@@ -4,7 +4,9 @@
 
 Custom backend helpers: `utils/secret_refs.py` (one allowlisted environment reference), `private_deployment.py` (startup/private HTTP policy), `provider_http.py` (safe provider transport), and `surplus_images.py` (JSON edits, catalog capabilities, bounded image results). They are wired into native env/config/auth lifecycle, chat/images/pipelines/Anthropic/model unload, and diagnostic events. Settings metadata lives in native config rows and API configs.
 
-Frontend changes: native auth page, remembered-login helper, auth API cleanup, root-layout cross-tab logout, app-shell blocked-storage fallback, connection editor, and image settings/API. New image fields use the native config API; old source-less settings are literal. Source metadata remains attached to native connection config during reorder/import/export/delete.
+Frontend changes: native auth page, remembered-login helper, auth API cleanup, root-layout cross-tab logout, `app.html` blocked-storage fallback, connection editor (`AddConnectionModal.svelte`), and image settings/API. New image fields use the native config API; old source-less settings are literal. Source metadata remains attached to native connection config during reorder/import/export/delete.
+
+Do not add a second test or script tree. Extend the existing files under `main/tests/` only when credential, private-access, Surplus request, or remembered-login behavior changes. See root `AGENTS.md`.
 
 ## Verification commands
 

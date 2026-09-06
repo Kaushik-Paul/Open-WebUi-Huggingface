@@ -16,6 +16,11 @@
 **/static/pyodide
 **/test-results
 **/playwright-report
+main/tests
+main/docs
+PLAN.md
+AGENTS.md
+doubts.md
 .agents
 .codex
 .idea

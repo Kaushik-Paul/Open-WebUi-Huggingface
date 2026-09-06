@@ -12,6 +12,8 @@ pinned: false
 
 The actual Open WebUI v0.11.3 application, customized for one owner and Surplus text/image APIs. The same Docker image runs locally and in a Docker Space. Upstream branding and licenses are retained in `main/upstream/`.
 
+Local login, remembered credentials, secret-name API keys, Surplus chat, and Surplus image generation/editing are implemented. Open decisions (Space database/storage and preferred models) are in [doubts.md](doubts.md). Do not treat ephemeral Space disk as durable storage.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env` **only if you do not already have a `.env`**. For an existing file, merge the missing entries and keep your `SURPLUS_API_KEY`.
@@ -24,8 +26,10 @@ The local named volume preserves accounts, chats, settings, uploads, and generat
 
 “Remember me on this browser” is enabled by default and stores your email **and raw password** in localStorage, as requested. Same-origin JavaScript and anyone with access to the browser profile can read it. Opt out on shared devices. Logout clears it across tabs. Provider secret values stay on the server.
 
+Changing `WEBUI_ADMIN_PASSWORD` does not reset an existing account. While logged in, use native Account settings. Offline recovery: stop the service, back up data, then `docker compose run --rm --entrypoint python webui /app/scripts/reset_owner_password.py`. Rotate `WEBUI_SECRET_KEY` afterward to invalidate existing sessions.
+
 ## Spaces
 
 Create a Docker Space from this repository. Add the `.env.example` secret values as Space Secrets and configuration values as Space Variables; set `WEBUI_URL` to the Space origin. Use external PostgreSQL and durable upload storage for durable use. The default container filesystem is ephemeral on Spaces; a directory named `/data` does not make it durable. No Hugging Face access token is required for injected Secrets.
 
-See [deployment and recovery](main/docs/deployment.md), [Surplus setup](main/docs/surplus.md), [customizations and upgrades](main/docs/customization.md), [request-path audit](main/docs/request-path-audit.md), and [verification results](main/docs/verification.md). Open decisions are in [doubts.md](doubts.md).
+See [deployment and recovery](main/docs/deployment.md), [Surplus setup](main/docs/surplus.md), [customizations and upgrades](main/docs/customization.md), [request-path audit](main/docs/request-path-audit.md), and [verification results](main/docs/verification.md). Agent/maintainer rules, including when not to add tests, are in [AGENTS.md](AGENTS.md).

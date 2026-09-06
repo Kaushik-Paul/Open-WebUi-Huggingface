@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir uv==0.8.17 \
 COPY --chown=1000:1000 main/upstream/backend/ ./
 COPY --chown=1000:1000 --from=frontend /app/build /app/build
 COPY --chown=1000:1000 main/upstream/package.json main/upstream/CHANGELOG.md /app/
-COPY --chown=1000:1000 main/scripts/ /app/scripts/
+COPY --chown=1000:1000 main/scripts/entrypoint.sh main/scripts/reset_owner_password.py /app/scripts/
 RUN mkdir -p /app/backend/data && chown -R 1000:1000 /app
 USER 1000:1000
 EXPOSE 7860
