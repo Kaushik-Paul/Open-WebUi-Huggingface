@@ -76,3 +76,16 @@ def test_capability_metadata():
     m={'id':'arbitrary','architecture':{'input_modalities':['text','image'],'output_modalities':['image']}}
     assert images.image_capable(m) and images.image_capable(m,edit=True)
     assert not images.image_capable({'id':'image-name-is-not-proof'})
+
+
+def test_image_model_chat_routing():
+    image_model = {'architecture': {'input_modalities': ['text'], 'output_modalities': ['image']}}
+    edit_model = {'architecture': {'input_modalities': ['text', 'image'], 'output_modalities': ['image']}}
+    text_model = {'architecture': {'input_modalities': ['text'], 'output_modalities': ['text']}}
+    assert images.image_only_chat_model(image_model)
+    assert not images.image_only_chat_model(edit_model)
+    assert not images.image_only_chat_model(text_model)
+    assert images.chat_image_prompt([{'role': 'system', 'content': 'x'}, {'role': 'user', 'content': ' Draw a cat '}]) == 'Draw a cat'
+    assert images.chat_image_prompt([{'role': 'user', 'content': [{'type': 'text', 'text': 'Draw'}, {'type': 'text', 'text': 'a cat'}]}]) == 'Draw a cat'
+    with pytest.raises(HTTPException):
+        images.chat_image_prompt([{'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.com/a.png'}}]}])

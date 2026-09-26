@@ -412,8 +412,8 @@
 									>{$i18n.t('Auth')}</label
 								>
 
-								<div class="flex gap-2">
-									<div class="flex-shrink-0 self-start">
+								<div class="flex flex-col gap-3">
+									<div class="self-start">
 										<select
 											id="select-bearer-or-session"
 											class={`w-full text-sm ${selectClass}`}
@@ -432,22 +432,25 @@
 										</select>
 									</div>
 
-									<div class="flex flex-1 items-center">
+									<div class="flex min-w-0 flex-col gap-2">
 										{#if auth_type === 'bearer'}
-                                            {#if !direct && !ollama}
-                                                <label class="block text-sm">Credential source
-                                                    <select aria-label="Credential source" bind:value={key_source} class="bg-transparent p-2">
-                                                        <option value="secret">Secret name</option>
-                                                        <option value="literal">Literal API key</option>
-                                                    </select>
-                                                </label>
-                                                {#if key_source === 'secret'}<p class="text-xs opacity-70">Enter SURPLUS_API_KEY. Its value stays on the server.</p>{/if}
-                                            {/if}
+											{#if !direct && !ollama}
+												<label class="flex flex-col gap-1 text-xs text-gray-500">Credential source
+													<select aria-label="Credential source" bind:value={key_source} class="w-full rounded-lg border border-gray-200 bg-transparent p-2 text-sm dark:border-gray-700">
+														<option value="secret">Secret name</option>
+														<option value="literal">Literal API key</option>
+													</select>
+												</label>
+											{/if}
+											<label for="connection-credential" class="text-xs text-gray-500">{key_source === 'secret' && !direct && !ollama ? 'Secret name' : 'API key'}</label>
 											<SensitiveInput
+												id="connection-credential"
 												bind:value={key}
-												placeholder={$i18n.t('API Key')}
+												placeholder={key_source === 'secret' && !direct && !ollama ? 'SURPLUS_API_KEY' : $i18n.t('API Key')}
+												outerClassName="flex min-w-0 w-full"
 												required={false}
 											/>
+											{#if key_source === 'secret' && !direct && !ollama}<p class="text-xs opacity-70">Enter SURPLUS_API_KEY. Its value stays on the server.</p>{/if}
 										{:else if auth_type === 'none'}
 											<div class={`text-xs self-center translate-y-[1px] text-gray-500`}>
 												{$i18n.t('No authentication')}

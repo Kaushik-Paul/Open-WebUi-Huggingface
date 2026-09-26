@@ -132,7 +132,9 @@
 					>
 						<div class="self-center shrink-0 size-4.5 flex items-center justify-center">
 							<img
-								src={`${WEBUI_API_BASE_URL}/users/${$user.id}/profile/image`}
+								src={$user.profile_image_url?.startsWith('data:image/')
+									? $user.profile_image_url
+									: '/static/user.png'}
 								alt=""
 								class="size-4.5 rounded-full object-cover"
 							/>

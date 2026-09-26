@@ -22,10 +22,16 @@ with httpx.Client(base_url=BASE,timeout=60) as client:
     assert CANARY not in r.text and r.json()['OPENAI_API_KEYS']==['SURPLUS_API_KEY']
     r=client.post('/openai/verify',json={'url':connection['OPENAI_API_BASE_URLS'][0],'key':'SURPLUS_API_KEY','config':{'key_source':'secret'}});assert r.status_code==200,r.text[:300]
     r=client.get('/openai/models');assert r.status_code==200,r.text[:300]
+    model_ids={model['id'] for model in r.json()['data']}
+    assert 'fixture-image' in model_ids and 'fixture-edit' not in model_ids
     for stream in [False,True]:
         r=client.post('/openai/chat/completions',json={'model':'fixture-chat','messages':[{'role':'user','content':'hello'}],'stream':stream})
         assert r.status_code==200 and 'Mock reply.' in r.text,r.text[:500]
         if stream:assert 'total_tokens' in r.text
+    r=client.post('/openai/chat/completions',json={'model':'fixture-image','messages':[{'role':'user','content':'blue square'}],'stream':True})
+    assert r.status_code==200 and '/api/v1/files/' in r.text,r.text[:500]
+    image_url=r.json()['choices'][0]['message']['content'].split('](',1)[1].rstrip(')')
+    r=client.get(image_url);assert r.status_code==200 and r.headers['content-type'].startswith('image/')
     config=client.get('/api/v1/images/config').json()
     for prefix in ['IMAGES_OPENAI','IMAGES_EDIT_OPENAI']:
         config.update({prefix+'_API_BASE_URL':'http://mock-provider:8000/v1',prefix+'_API_KEY':'SURPLUS_API_KEY',prefix+'_KEY_SOURCE':'secret',prefix+'_COMPATIBILITY':'surplus',prefix+'_API_VERSION':''})

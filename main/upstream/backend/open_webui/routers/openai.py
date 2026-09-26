@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import time
 from typing import Optional
 from urllib.parse import quote, urlparse
 
@@ -59,6 +60,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from open_webui.utils.secret_refs import connection_credential
+from open_webui.utils import surplus_images
 from open_webui.utils.provider_http import ProviderSession, get_provider_session as get_session
 
 log = logging.getLogger(__name__)
@@ -752,15 +754,19 @@ async def get_all_models_responses(request: Request, user: UserModel) -> list:
 
             if urlparse(url).hostname == 'api.surplusintelligence.ai':
                 model_list = [m for m in model_list if not (m.get('architecture') or {}).get('output_modalities')
-                              or 'text' in m['architecture']['output_modalities']]
+                              or 'text' in m['architecture']['output_modalities']
+                              or surplus_images.image_only_chat_model(m)]
                 if isinstance(response, dict):
                     response['data'] = model_list
                 else:
                     responses[idx] = model_list
                 for model in model_list:
+                    image_only = surplus_images.image_only_chat_model(model)
                     model['info'] = {'meta': {'capabilities': {
                         'vision': 'image' in (model.get('architecture') or {}).get('input_modalities', []),
-                        'function_calling': 'tools' in model.get('supported_features', [])}}}
+                        'function_calling': 'tools' in model.get('supported_features', []),
+                        'image_generation': not image_only,
+                        'image_output': image_only}}}
             for model in model_list:
                 # Remove name key if its value is None #16689
                 if 'name' in model and model['name'] is None:
@@ -1554,6 +1560,24 @@ async def generate_chat_completion(
 
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+
+    if urlparse(url).hostname == 'api.surplusintelligence.ai' and surplus_images.image_only_chat_model(model.get('openai') or model):
+        from open_webui.routers.images import upload_image
+
+        prompt = surplus_images.chat_image_prompt(payload.get('messages'))
+        body = surplus_images.image_payload(payload['model'], prompt)
+        results = await surplus_images.request_images(url, key, 'literal', body)
+        files = [(await upload_image(request, data, mime, {**body, **(metadata or {})}, user))[1]
+                 for data, mime in results]
+        return {
+            'id': f'chatcmpl-image-{int(time.time())}',
+            'object': 'chat.completion',
+            'created': int(time.time()),
+            'model': payload['model'],
+            'choices': [{'index': 0, 'message': {'role': 'assistant',
+                         'content': '\n'.join(f'![Generated image]({file["url"]})' for file in files)},
+                         'finish_reason': 'stop'}],
+        }
 
     # Add user info to the payload if the model is a pipeline
     if 'pipeline' in model and model.get('pipeline'):

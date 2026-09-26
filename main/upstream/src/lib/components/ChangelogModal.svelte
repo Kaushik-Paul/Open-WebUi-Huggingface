@@ -32,7 +32,7 @@
 			return;
 		}
 
-		changelog = await getChangelog().catch(() => {
+		changelog = await getChangelog(localStorage.token).catch(() => {
 			error = true;
 			return null;
 		});

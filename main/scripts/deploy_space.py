@@ -11,8 +11,10 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
+from urllib.parse import quote
 
-from huggingface_hub import HfApi
+from dotenv import dotenv_values
+from huggingface_hub import HfApi, Volume
 from huggingface_hub.utils import filter_repo_objects
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +23,28 @@ FRONTEND_DIST = PROJECT_ROOT / 'main' / 'frontend-dist'
 DEFAULT_SPACE_NAME = 'Open-WebUI-Surplus'
 REFERENCE_NAME = 'SURPLUS_API_KEY'
 FRONTEND_IMAGE = 'owui-hf-frontend:local'
+SUPABASE_POOLER_HOST = 'aws-0-ap-northeast-1.pooler.supabase.com'
+SUPABASE_POOLER_USER = 'postgres.wbfkaggbcpmgaybddzxd'
+SPACE_BUCKET = 'kaushikpaul/open-webui-surplus-data'
+SPACE_DATA_PATH = '/app/backend/data'
+SURPLUS_URL = 'https://api.surplusintelligence.ai/v1'
+SPACE_DEFAULTS = {
+    'OPENAI_API_BASE_URL': SURPLUS_URL,
+    'OPENAI_API_KEY': REFERENCE_NAME,
+    'OPENAI_API_CONFIGS': '{"0":{"key_source":"secret","auth_type":"bearer","enable":true}}',
+    'PROVIDER_SECRET_NAMES': REFERENCE_NAME,
+    'DEFAULT_MODELS': 'deepseek-v4-flash-0731',
+    'ENABLE_OLLAMA_API': 'false',
+    'ENABLE_IMAGE_GENERATION': 'true',
+    'IMAGE_GENERATION_ENGINE': 'openai',
+    'IMAGE_GENERATION_MODEL': 'venice-z-image-turbo',
+    'IMAGE_SIZE': '512x512',
+    'IMAGES_OPENAI_API_BASE_URL': SURPLUS_URL,
+    'IMAGES_OPENAI_API_KEY': REFERENCE_NAME,
+    'IMAGES_OPENAI_KEY_SOURCE': 'secret',
+    'IMAGES_OPENAI_COMPATIBILITY': 'surplus',
+    'WEBUI_AUTH_COOKIE_SAME_SITE': 'none',
+}
 
 DEPLOY_IGNORE_PATTERNS = [
     '.env',
@@ -65,6 +89,7 @@ SKIP_FROM_ENV = {
     'ALLOW_HTTP_TEST_PROVIDERS',
     'HF_TOKEN',
     'HUGGING_FACE_HUB_TOKEN',
+    'SUPABASE_DATABASE_PASSWORD',
 }
 REQUIRED_STARTUP = ('WEBUI_ADMIN_EMAIL', 'WEBUI_ADMIN_PASSWORD', 'WEBUI_SECRET_KEY')
 
@@ -122,23 +147,15 @@ def git_visible_files() -> list[str]:
 
 
 def load_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
     if not path.is_file():
-        return values
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        key, value = line.split('=', 1)
-        key = key.strip()
-        if key.startswith('export '):
-            key = key[7:].strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        if key:
-            values[key] = value
-    return values
+        return {}
+    parsed = dotenv_values(path, interpolate=False)
+    return {name: os.environ.get(name, value) for name, value in parsed.items() if value is not None}
+
+
+def supabase_database_url(password: str) -> str:
+    encoded = quote(password, safe='')
+    return f'postgresql://{SUPABASE_POOLER_USER}:{encoded}@{SUPABASE_POOLER_HOST}:5432/postgres?sslmode=require'
 
 
 def is_placeholder(value: str) -> bool:
@@ -165,6 +182,8 @@ def classify_env(env: dict[str, str], space_id: str) -> tuple[dict[str, str], di
     secrets: dict[str, str] = {}
     variables: dict[str, str] = {}
     notes: list[str] = []
+    if is_placeholder(env.get('DATABASE_URL', '')) and not is_placeholder(env.get('SUPABASE_DATABASE_PASSWORD', '')):
+        env = {**env, 'DATABASE_URL': supabase_database_url(env['SUPABASE_DATABASE_PASSWORD'])}
     for name, value in env.items():
         if name in SKIP_FROM_ENV or is_placeholder(value):
             continue
@@ -181,15 +200,19 @@ def classify_env(env: dict[str, str], space_id: str) -> tuple[dict[str, str], di
     return secrets, variables, notes
 
 
-def validate_startup(env: dict[str, str]) -> None:
-    missing = [name for name in REQUIRED_STARTUP if is_placeholder(env.get(name, ''))]
+def validate_startup(env: dict[str, str], existing_keys: set[str] | None = None) -> None:
+    existing_keys = existing_keys or set()
+    missing = [name for name in REQUIRED_STARTUP if is_placeholder(env.get(name, '')) and name not in existing_keys]
     if missing:
-        raise SystemExit('Configure ' + ', '.join(missing) + ' in .env before deploying; values are not printed')
-    if len(env.get('WEBUI_ADMIN_PASSWORD', '')) < 12:
+        raise SystemExit('Configure ' + ', '.join(missing) + ' in .env or existing Space settings; values are not printed')
+    password = env.get('WEBUI_ADMIN_PASSWORD', '')
+    signing_key = env.get('WEBUI_SECRET_KEY', '')
+    email = env.get('WEBUI_ADMIN_EMAIL', '')
+    if password and len(password) < 12:
         raise SystemExit('WEBUI_ADMIN_PASSWORD must be at least 12 characters')
-    if len(env.get('WEBUI_SECRET_KEY', '')) < 32:
+    if signing_key and len(signing_key) < 32:
         raise SystemExit('WEBUI_SECRET_KEY must be at least 32 characters')
-    if '@' not in env.get('WEBUI_ADMIN_EMAIL', ''):
+    if email and '@' not in email:
         raise SystemExit('WEBUI_ADMIN_EMAIL must be a valid email address')
 
 
@@ -212,6 +235,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--hardware', default=None, help='Optional Space hardware, for example cpu-basic')
     parser.add_argument('--public', action='store_true', help='Create a public Space (default is private)')
     parser.add_argument('--skip-env', action='store_true', help='Upload code only; do not read or apply .env')
+    parser.add_argument('--attach-bucket', action='store_true', help='Attach the private data bucket; requires DATABASE_URL')
     parser.add_argument('--skip-frontend-build', action='store_true', help='Reuse existing main/frontend-dist instead of rebuilding')
     parser.add_argument('--dry-run', action='store_true', help='Print upload paths and env key names, not values')
     return parser.parse_args()
@@ -230,20 +254,31 @@ def main() -> None:
     upload_bytes = sum((PROJECT_ROOT / path).stat().st_size for path in upload_files if (PROJECT_ROOT / path).is_file())
     print(f'Upload set: {len(upload_files)} files, {upload_bytes / (1024 * 1024):.1f} MiB')
 
+    api = HfApi()
+    space_id = resolve_space_id(api, args.repo_id)
     env: dict[str, str] = {}
+    existing_keys: set[str] = set()
+    if not args.skip_env or args.attach_bucket:
+        try:
+            existing_keys = set(api.get_space_secrets(space_id)) | set(api.get_space_variables(space_id))
+        except Exception:
+            pass  # A new Space has no existing settings.
     if not args.skip_env:
         env = load_env_file(ENV_PATH)
         if not env:
             raise SystemExit('Root .env is missing; copy .env.example, fill values, or pass --skip-env')
-        validate_startup(env)
+        validate_startup(env, existing_keys)
 
-    api = HfApi()
-    space_id = resolve_space_id(api, args.repo_id)
     secrets, variables, notes = classify_env(env, space_id) if env else ({}, {}, [])
     origin = space_runtime_origin(space_id)
+    if env:
+        for name, value in SPACE_DEFAULTS.items():
+            variables.setdefault(name, value)
     variables.setdefault('WEBUI_URL', origin)
     variables.setdefault('WEBUI_AUTH_COOKIE_SECURE', 'true')
     variables.setdefault('PROVIDER_SECRET_NAMES', REFERENCE_NAME)
+    if args.attach_bucket and 'DATABASE_URL' not in secrets and 'DATABASE_URL' not in existing_keys:
+        raise SystemExit('A DATABASE_URL Space Secret is required before attaching the bucket')
     if env and is_placeholder(env.get('SURPLUS_API_KEY', '')):
         notes.append('SURPLUS_API_KEY is unset; chat/image provider calls will fail until it is added as a Space secret')
     if args.skip_env:
@@ -253,6 +288,8 @@ def main() -> None:
         print(f'Would deploy to https://huggingface.co/spaces/{space_id}')
         print('Space secrets: ' + (', '.join(sorted(secrets)) or '(none)'))
         print('Space variables: ' + (', '.join(sorted(variables)) or '(none)'))
+        if args.attach_bucket:
+            print(f'Would mount private bucket {SPACE_BUCKET} at {SPACE_DATA_PATH}')
         for note in notes:
             print(note)
         for path in upload_files:
@@ -270,6 +307,12 @@ def main() -> None:
     if args.hardware:
         create_kwargs['space_hardware'] = args.hardware
     api.create_repo(**create_kwargs)
+    for key, value in secrets.items():
+        api.add_space_secret(space_id, key, value)
+    for key, value in variables.items():
+        api.add_space_variable(space_id, key, value)
+    if args.attach_bucket:
+        api.set_space_volumes(space_id, [Volume(type='bucket', source=SPACE_BUCKET, mount_path=SPACE_DATA_PATH)])
     api.upload_folder(
         repo_id=space_id,
         repo_type='space',
@@ -278,17 +321,13 @@ def main() -> None:
         ignore_patterns=DEPLOY_IGNORE_PATTERNS,
         commit_message='Deploy Open WebUI Docker Space',
     )
-    for key, value in secrets.items():
-        api.add_space_secret(space_id, key, value)
-    for key, value in variables.items():
-        api.add_space_variable(space_id, key, value)
     print('Applied Space secrets: ' + (', '.join(sorted(secrets)) or '(none)'))
     print('Applied Space variables: ' + (', '.join(sorted(variables)) or '(none)'))
     for note in notes:
         print(note)
     print(f'Space page: https://huggingface.co/spaces/{space_id}')
     print(f'Runtime origin: {origin}')
-    print('Space disk is ephemeral until PostgreSQL and durable file storage are configured.')
+    print('Verify PostgreSQL, mounted file storage, and a Space restart before claiming durability.')
 
 
 if __name__ == '__main__':

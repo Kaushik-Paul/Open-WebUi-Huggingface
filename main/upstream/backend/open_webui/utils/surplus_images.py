@@ -135,6 +135,32 @@ def image_capable(model, *, edit=False):
         return bool(capabilities.get('image_edit' if edit else 'image_generation')) or (not edit and ('image' in modalities or kind in ('image', 'image-generation', 'text-to-image')))
     return ('image_edit' if edit else 'image_generation') in capabilities
 
+def image_only_chat_model(model):
+    architecture = model.get('architecture') or {}
+    outputs = architecture.get('output_modalities') or []
+    inputs = architecture.get('input_modalities') or []
+    return 'image' in outputs and 'text' not in outputs and 'text' in inputs and 'image' not in inputs
+
+
+def chat_image_prompt(messages):
+    for message in reversed(messages or []):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            prompt = content.strip()
+        elif isinstance(content, list):
+            if any(part.get('type') not in ('text', 'input_text') for part in content if isinstance(part, dict)):
+                raise HTTPException(400, 'Image model chat accepts a text prompt only')
+            prompt = ' '.join(part.get('text', '') for part in content if isinstance(part, dict)).strip()
+        else:
+            prompt = ''
+        if prompt:
+            return prompt
+        break
+    raise HTTPException(400, 'Enter a prompt for the image model')
+
+
 async def request_images(url, key, source, body, *, edit=False):
     credential = connection_credential(url, key, {'key_source': source})
     timeout = min(max(int(os.getenv('SURPLUS_IMAGE_TIMEOUT', '180')), 10), 600)
