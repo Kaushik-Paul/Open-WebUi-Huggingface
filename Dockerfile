@@ -10,7 +10,7 @@ ENV PYTHONUNBUFFERED=1 ENV=prod PORT=7860 HOST=0.0.0.0 DOCKER=true \
     SCARF_NO_ANALYTICS=true DO_NOT_TRACK=true ANONYMIZED_TELEMETRY=false \
     ENABLE_OLLAMA_API=false RAG_EMBEDDING_MODEL_AUTO_UPDATE=false \
     WHISPER_MODEL_AUTO_UPDATE=false UV_LINK_MODE=copy \
-    UV_CONCURRENT_DOWNLOADS=1 UV_CONCURRENT_INSTALLS=1
+    UV_CONCURRENT_DOWNLOADS=1 UV_CONCURRENT_INSTALLS=1 UV_HTTP_TIMEOUT=120
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libmariadb-dev ffmpeg libsm6 libxext6 curl ca-certificates pandoc git \
     && rm -rf /var/lib/apt/lists/* \

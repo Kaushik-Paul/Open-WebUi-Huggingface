@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import re
 import time
 from typing import Optional
@@ -686,6 +687,13 @@ async def speech(request: Request, user=Depends(get_verified_user)):
         raise HTTPException(status_code=401, detail=ERROR_MESSAGES.OPENAI_NOT_FOUND)
 
 
+def _is_surplus_image_chat_url(url: str) -> bool:
+    hostname = urlparse(url).hostname
+    return hostname == 'api.surplusintelligence.ai' or (
+        os.getenv('ALLOW_HTTP_TEST_PROVIDERS') == 'true' and hostname == 'mock-provider'
+    )
+
+
 async def get_all_models_responses(request: Request, user: UserModel) -> list:
     enable_openai_api, api_base_urls, api_keys, api_configs = await get_openai_runtime_config()
     if not enable_openai_api:
@@ -752,7 +760,7 @@ async def get_all_models_responses(request: Request, user: UserModel) -> list:
                 # Catch non-list responses
                 model_list = []
 
-            if urlparse(url).hostname == 'api.surplusintelligence.ai':
+            if _is_surplus_image_chat_url(url):
                 model_list = [m for m in model_list if not (m.get('architecture') or {}).get('output_modalities')
                               or 'text' in m['architecture']['output_modalities']
                               or surplus_images.image_only_chat_model(m)]
@@ -1561,7 +1569,7 @@ async def generate_chat_completion(
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
 
-    if urlparse(url).hostname == 'api.surplusintelligence.ai' and surplus_images.image_only_chat_model(model.get('openai') or model):
+    if _is_surplus_image_chat_url(url) and surplus_images.image_only_chat_model(model.get('openai') or model):
         from open_webui.routers.images import upload_image
 
         prompt = surplus_images.chat_image_prompt(payload.get('messages'))
