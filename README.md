@@ -12,7 +12,7 @@ pinned: false
 
 The actual Open WebUI v0.11.3 application, customized for one owner and Surplus text/image APIs. The same Docker image runs locally and in a Docker Space. Upstream branding and licenses are retained in `main/upstream/`.
 
-Local login, remembered credentials, secret-name API keys, Surplus chat, and Surplus image generation/editing are implemented. The private Hugging Face file bucket exists; Supabase PostgreSQL and the Space mount are pending. Deployment decisions and selected models are in [doubts.md](doubts.md). Do not treat ephemeral Space disk as durable storage.
+Local login, remembered credentials, secret-name API keys, Surplus chat, and Surplus image generation/editing are implemented. The Space uses Supabase PostgreSQL for chats/settings and a private Hugging Face bucket for uploaded and generated files. Deployment decisions and selected models are in [doubts.md](doubts.md). Authenticated live save/reload after a Space restart remains an owner acceptance check.
 
 ## Local setup
 
@@ -36,12 +36,12 @@ The authenticated `hf` CLI plus `python-dotenv` are used by the helper. It creat
 # From an environment that has huggingface_hub, for example the hf CLI:
 #   /home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py
 python3 main/scripts/deploy_space.py --dry-run
-python3 main/scripts/deploy_space.py --attach-bucket  # after DATABASE_URL and data decision
+python3 main/scripts/deploy_space.py --attach-bucket  # applies Supabase URL from .env and mounts the bucket
 python3 main/scripts/deploy_space.py --skip-env   # later code-only updates
 ```
 
 Install `python-dotenv` in the Python environment used for deployment (for example, `python -m pip install python-dotenv`); keep the password in `.env`. The helper builds the Svelte frontend locally, then uploads `main/frontend-dist` so Hugging Face does not run the memory-heavy Vite build. Re-run after frontend changes so the Space stays in sync. Local `docker compose` still compiles from source unless that dist directory contains `index.html` (delete it to force a local frontend rebuild).
 
-Default Space: `kaushikpaul/Open-WebUI-Surplus` (override with `--repo-id` or `HF_SPACE_ID`). Use Supabase PostgreSQL plus the private Hugging Face bucket mounted at `/app/backend/data` for durable use. The bucket has been created but is not mounted yet. The default Space filesystem is ephemeral. No Hugging Face access token is required for injected Secrets.
+Default Space: `kaushikpaul/Open-WebUI-Surplus` (override with `--repo-id` or `HF_SPACE_ID`). Use Supabase PostgreSQL plus the private Hugging Face bucket mounted at `/app/backend/data` for durable use. The bucket is mounted on the live Space. The default Space filesystem is ephemeral. No Hugging Face access token is required for injected Secrets.
 
 See [deployment and recovery](main/docs/deployment.md), [Surplus setup](main/docs/surplus.md), [customizations and upgrades](main/docs/customization.md), [request-path audit](main/docs/request-path-audit.md), and [verification results](main/docs/verification.md). Agent/maintainer rules, including when not to add tests, are in [AGENTS.md](AGENTS.md).

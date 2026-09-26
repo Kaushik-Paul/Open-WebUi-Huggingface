@@ -24,6 +24,9 @@ with httpx.Client(base_url=BASE,timeout=60) as client:
     r=client.get('/openai/models');assert r.status_code==200,r.text[:300]
     model_ids={model['id'] for model in r.json()['data']}
     assert 'fixture-image' in model_ids and 'fixture-edit' not in model_ids
+    r=client.get('/api/models');assert r.status_code==200,r.text[:300]
+    chat_model_ids={model['id'] for model in r.json()['data']}
+    assert 'fixture-image' in chat_model_ids and 'fixture-edit' not in chat_model_ids
     for stream in [False,True]:
         r=client.post('/openai/chat/completions',json={'model':'fixture-chat','messages':[{'role':'user','content':'hello'}],'stream':stream})
         assert r.status_code==200 and 'Mock reply.' in r.text,r.text[:500]
