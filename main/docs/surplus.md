@@ -22,8 +22,10 @@ Use native explicit image controls even if a chat model does not support functio
 
 ## Error behavior and live checks
 
-Errors distinguish rejected keys, insufficient balance, unavailable model/seller, rate limits, and timeouts without forwarding arbitrary provider bodies. Raw upstream error text and credential suffixes are not included in user-facing diagnostic events.
+Errors distinguish rejected keys, insufficient balance, unavailable model/seller, rate limits, and timeouts without forwarding arbitrary provider bodies. For a Surplus image response with the exact `503 no_healthy_sellers` code, the UI says that no healthy seller is available for that model and suggests selecting another model or trying later; it does not retry or silently switch models. Raw upstream error text and credential suffixes are not included in user-facing diagnostic events.
 
 Live checks on 2026-09-26: `deepseek-v4-flash-0731` streamed a useful reply, `venice-z-image-turbo` returned one valid image, and `venice-gpt-image-2` returned HTTP 503 with and without an explicit size. Earlier `grok-imagine-edit` succeeded without a size parameter. A seller serving `openai-gpt-oss-120b` returned HTTP 200 SSE without `[DONE]`; native streaming must handle EOF. These are compatibility observations, not permanent availability promises. Full results and remaining checks are in `verification.md`.
 
 `main/scripts/smoke_surplus.py` is an explicit, billable smoke-check command using the root `.env`. It never prints the key or automatically retries. Automated regression tests use mocks and no balance.
+
+Live follow-up on 2026-09-26: `seedream-4.5` returned `503 no_healthy_sellers` with 512×512 and with size omitted. `venice-gpt-image-2`, `venice-grok-imagine-quality`, `venice-flux-2-max`, and `venice-flux-2-pro` returned the same code with size omitted. `venice-z-image-turbo` generated one valid image at 512×512. The failing requests were rejected by Surplus seller routing, not image JSON validation. Catalog/market offers cannot prove generation will succeed, because media seller health probes do not generate an image.

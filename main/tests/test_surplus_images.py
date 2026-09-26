@@ -57,6 +57,22 @@ async def test_error_echo_is_never_returned(status, monkeypatch):
         assert 'canary' not in error.value.detail
         assert error.value.status_code == status
 
+@pytest.mark.asyncio
+async def test_unavailable_seller_error_is_actionable_without_echo(monkeypatch):
+    monkeypatch.setenv('ALLOW_HTTP_TEST_PROVIDERS','true')
+    requests = 0
+    async def handler(request):
+        nonlocal requests
+        requests += 1
+        return web.json_response({'error': {'code': 'no_healthy_sellers', 'message': request.headers.get('Authorization')}}, status=503)
+    async with provider(handler) as url:
+        with pytest.raises(HTTPException) as error:
+            await images.request_images(url, 'canary-secret', 'literal', images.image_payload('fixture', 'x'))
+    assert requests == 1
+    assert error.value.status_code == 503
+    assert 'No healthy Surplus sellers' in error.value.detail
+    assert 'canary-secret' not in error.value.detail
+
 @pytest.mark.parametrize('params',[{'mask':'x'}, {'model':'override'}, {'resolution':'8K'}, {'response_format':'raw'}, {'quality':{}}])
 def test_payload_validation(params):
     with pytest.raises(HTTPException): images.image_payload('fixture','x',params=params)
