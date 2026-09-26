@@ -1,4 +1,4 @@
-"""Deploy this Docker Space to Hugging Face without uploading ignored or secret files.
+"""Deploy or update this Docker Space without uploading ignored or secret files.
 
 Mirrors the Manga-Translator helper: Git-visible files only, plus extra ignore
 patterns. Reads root .env with dotenv semantics and never prints values.
@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from dotenv import dotenv_values
 from huggingface_hub import HfApi, Volume
 from huggingface_hub.utils import filter_repo_objects
 
@@ -22,7 +23,6 @@ ENV_PATH = PROJECT_ROOT / '.env'
 FRONTEND_DIST = PROJECT_ROOT / 'main' / 'frontend-dist'
 DEFAULT_SPACE_NAME = 'Open-WebUI-Surplus'
 REFERENCE_NAME = 'SURPLUS_API_KEY'
-FRONTEND_IMAGE = 'owui-hf-frontend:local'
 SUPABASE_POOLER_HOST = 'aws-0-ap-northeast-1.pooler.supabase.com'
 SUPABASE_POOLER_USER = 'postgres.wbfkaggbcpmgaybddzxd'
 SPACE_BUCKET = 'kaushikpaul/open-webui-surplus-data'
@@ -105,35 +105,48 @@ def frontend_dist_files() -> list[str]:
 
 
 def build_frontend_dist() -> None:
-    print('Building frontend locally so the Hugging Face builder can skip Vite')
-    existing = subprocess.run(['docker', 'image', 'inspect', FRONTEND_IMAGE], capture_output=True)
-    if existing.returncode != 0:
+    print('Building frontend from current source so the Hugging Face builder can skip Vite')
+    source_dir = PROJECT_ROOT / 'main/upstream'
+    lockfile = source_dir / 'package-lock.json'
+    installed_lock = source_dir / 'node_modules/.package-lock.json'
+    use_installed = (
+        (source_dir / 'node_modules/.bin/vite').is_file()
+        and installed_lock.is_file()
+        and installed_lock.stat().st_mtime >= lockfile.stat().st_mtime
+    )
+    install_step = '' if use_installed else 'npm ci --force && '
+    print('Reusing installed Node dependencies' if use_installed else 'Installing Node dependencies')
+    with tempfile.TemporaryDirectory(prefix='owui-frontend-build-') as build_dir:
         subprocess.run(
             [
                 'docker', 'run', '--rm', '--name', 'owui-hf-frontend-build',
                 '-v', f'{PROJECT_ROOT / "main/upstream"}:/src:ro',
-                '-v', f'{FRONTEND_DIST}:/out',
+                '-v', f'{build_dir}:/out',
                 '-e', 'CYPRESS_INSTALL_BINARY=0',
-                '-e', 'NODE_OPTIONS=--max-old-space-size=4096',
+                '-e', 'NODE_OPTIONS=--max-old-space-size=6144',
                 '-w', '/app',
                 'node:22.19.0-bookworm-slim',
                 'sh', '-c',
-                'cp -a /src/. /app/ && npm ci --force && npm run build && cp -a /app/build/. /out/',
+                f'cp -a /src/. /app/ && {install_step}npm run build && cp -a /app/build/. /out/ && chown -R {os.getuid()}:{os.getgid()} /out/',
             ],
             check=True,
         )
-    else:
-        cid = subprocess.check_output(['docker', 'create', FRONTEND_IMAGE], text=True).strip()
-        try:
-            FRONTEND_DIST.mkdir(parents=True, exist_ok=True)
-            for path in FRONTEND_DIST.rglob('*'):
-                if path.is_file() and path.name != '.gitkeep':
-                    path.unlink()
-            subprocess.run(['docker', 'cp', f'{cid}:/app/build/.', str(FRONTEND_DIST)], check=True)
-        finally:
-            subprocess.run(['docker', 'rm', cid], check=True, stdout=subprocess.DEVNULL)
-    if not (FRONTEND_DIST / 'index.html').is_file():
-        raise SystemExit('Frontend build did not produce main/frontend-dist/index.html')
+        built = Path(build_dir)
+        if not (built / 'index.html').is_file():
+            raise SystemExit('Frontend build did not produce index.html')
+        FRONTEND_DIST.mkdir(parents=True, exist_ok=True)
+        for path in FRONTEND_DIST.iterdir():
+            if path.name == '.gitkeep':
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        for path in built.iterdir():
+            if path.is_dir():
+                shutil.copytree(path, FRONTEND_DIST / path.name)
+            else:
+                shutil.copy2(path, FRONTEND_DIST / path.name)
 
 
 def git_visible_files() -> list[str]:
@@ -149,6 +162,8 @@ def git_visible_files() -> list[str]:
 def load_env_file(path: Path) -> dict[str, str]:
     if not path.is_file():
         return {}
+    from dotenv import dotenv_values
+
     parsed = dotenv_values(path, interpolate=False)
     return {name: os.environ.get(name, value) for name, value in parsed.items() if value is not None}
 
@@ -235,20 +250,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--hardware', default=None, help='Optional Space hardware, for example cpu-basic')
     parser.add_argument('--public', action='store_true', help='Create a public Space (default is private)')
     parser.add_argument('--skip-env', action='store_true', help='Upload code only; do not read or apply .env')
+    parser.add_argument('--update', action='store_true', help='Update an existing Space with code only; leave its settings and storage untouched')
     parser.add_argument('--attach-bucket', action='store_true', help='Attach the private data bucket; requires DATABASE_URL')
-    parser.add_argument('--skip-frontend-build', action='store_true', help='Reuse existing main/frontend-dist instead of rebuilding')
+    parser.add_argument('--skip-frontend-build', action='store_true', help='Reuse main/frontend-dist for backend-only updates; frontend changes require a rebuild')
     parser.add_argument('--dry-run', action='store_true', help='Print upload paths and env key names, not values')
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.update:
+        if args.public or args.hardware or args.attach_bucket:
+            raise SystemExit('--update cannot change visibility, hardware, or bucket mounts')
+        args.skip_env = True
     if not args.dry_run and not args.skip_frontend_build:
         build_frontend_dist()
     elif not args.dry_run and not (FRONTEND_DIST / 'index.html').is_file():
         raise SystemExit('main/frontend-dist/index.html is missing; run without --skip-frontend-build')
     allow_patterns = git_visible_files() + frontend_dist_files()
-    upload_files = list(filter_repo_objects(allow_patterns, allow_patterns=allow_patterns, ignore_patterns=DEPLOY_IGNORE_PATTERNS))
+    upload_files = list(filter_repo_objects(allow_patterns, ignore_patterns=DEPLOY_IGNORE_PATTERNS))
     if any(path == '.env' or path.endswith('/.env') or Path(path).name.startswith('.env.') for path in upload_files):
         raise SystemExit('Refusing to upload an environment file')
     upload_bytes = sum((PROJECT_ROOT / path).stat().st_size for path in upload_files if (PROJECT_ROOT / path).is_file())
@@ -274,15 +294,16 @@ def main() -> None:
     if env:
         for name, value in SPACE_DEFAULTS.items():
             variables.setdefault(name, value)
-    variables.setdefault('WEBUI_URL', origin)
-    variables.setdefault('WEBUI_AUTH_COOKIE_SECURE', 'true')
-    variables.setdefault('PROVIDER_SECRET_NAMES', REFERENCE_NAME)
+    if not args.skip_env:
+        variables.setdefault('WEBUI_URL', origin)
+        variables.setdefault('WEBUI_AUTH_COOKIE_SECURE', 'true')
+        variables.setdefault('PROVIDER_SECRET_NAMES', REFERENCE_NAME)
     if args.attach_bucket and 'DATABASE_URL' not in secrets and 'DATABASE_URL' not in existing_keys:
         raise SystemExit('A DATABASE_URL Space Secret is required before attaching the bucket')
     if env and is_placeholder(env.get('SURPLUS_API_KEY', '')):
         notes.append('SURPLUS_API_KEY is unset; chat/image provider calls will fail until it is added as a Space secret')
-    if args.skip_env:
-        notes.append('Owner secrets were not applied; add WEBUI_ADMIN_EMAIL, WEBUI_ADMIN_PASSWORD, WEBUI_SECRET_KEY, and SURPLUS_API_KEY in Space settings or re-run without --skip-env')
+    if args.skip_env and not args.update:
+        notes.append('Space secrets and variables will not be changed')
 
     if args.dry_run:
         print(f'Would deploy to https://huggingface.co/spaces/{space_id}')
@@ -297,30 +318,39 @@ def main() -> None:
         return
 
     print(f'Deploying to https://huggingface.co/spaces/{space_id}')
-    create_kwargs = {
-        'repo_id': space_id,
-        'repo_type': 'space',
-        'space_sdk': 'docker',
-        'exist_ok': True,
-        'private': not args.public,
-    }
-    if args.hardware:
-        create_kwargs['space_hardware'] = args.hardware
-    api.create_repo(**create_kwargs)
+    if args.update:
+        api.repo_info(repo_id=space_id, repo_type='space')
+    else:
+        create_kwargs = {
+            'repo_id': space_id,
+            'repo_type': 'space',
+            'space_sdk': 'docker',
+            'exist_ok': True,
+            'private': not args.public,
+        }
+        if args.hardware:
+            create_kwargs['space_hardware'] = args.hardware
+        api.create_repo(**create_kwargs)
     for key, value in secrets.items():
         api.add_space_secret(space_id, key, value)
     for key, value in variables.items():
         api.add_space_variable(space_id, key, value)
     if args.attach_bucket:
         api.set_space_volumes(space_id, [Volume(type='bucket', source=SPACE_BUCKET, mount_path=SPACE_DATA_PATH)])
-    api.upload_folder(
-        repo_id=space_id,
-        repo_type='space',
-        folder_path=PROJECT_ROOT,
-        allow_patterns=allow_patterns,
-        ignore_patterns=DEPLOY_IGNORE_PATTERNS,
-        commit_message='Deploy Open WebUI Docker Space',
-    )
+    # Stage only reviewed paths. Passing every path as an allow pattern to
+    # upload_folder causes quadratic matching against the full workspace.
+    with tempfile.TemporaryDirectory(prefix='owui-space-upload-') as staging_dir:
+        staging_root = Path(staging_dir)
+        for relative in upload_files:
+            target = staging_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(PROJECT_ROOT / relative, target)
+        api.upload_folder(
+            repo_id=space_id,
+            repo_type='space',
+            folder_path=staging_root,
+            commit_message='Deploy Open WebUI Docker Space',
+        )
     print('Applied Space secrets: ' + (', '.join(sorted(secrets)) or '(none)'))
     print('Applied Space variables: ' + (', '.join(sorted(variables)) or '(none)'))
     for note in notes:

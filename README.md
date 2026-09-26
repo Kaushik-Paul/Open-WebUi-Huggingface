@@ -37,10 +37,11 @@ The authenticated `hf` CLI plus `python-dotenv` are used by the helper. It creat
 #   /home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py
 python3 main/scripts/deploy_space.py --dry-run
 python3 main/scripts/deploy_space.py --attach-bucket  # applies Supabase URL from .env and mounts the bucket
-python3 main/scripts/deploy_space.py --skip-env   # later code-only updates
+/home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py --update --repo-id kaushikpaul/Open-WebUI-Surplus
+# For backend-only changes, add --skip-frontend-build to reuse the previous frontend.
 ```
 
-Install `python-dotenv` in the Python environment used for deployment (for example, `python -m pip install python-dotenv`); keep the password in `.env`. The helper builds the Svelte frontend locally, then uploads `main/frontend-dist` so Hugging Face does not run the memory-heavy Vite build. Re-run after frontend changes so the Space stays in sync. Local `docker compose` still compiles from source unless that dist directory contains `index.html` (delete it to force a local frontend rebuild).
+Install `python-dotenv` in the Python environment used for deployment (for example, `python -m pip install python-dotenv`); keep the password in `.env`. The helper rebuilds the Svelte frontend from current source by default, then uploads `main/frontend-dist` so Hugging Face does not run the memory-heavy Vite build. `--update` uploads code to the existing Space without reading `.env` or changing Secrets, Variables, hardware, visibility, or bucket mounts. Use `--skip-frontend-build` only for backend or documentation changes. Local `docker compose` also uses `main/frontend-dist`; rebuild it after UI changes before building the Docker image.
 
 Default Space: `kaushikpaul/Open-WebUI-Surplus` (override with `--repo-id` or `HF_SPACE_ID`). Use Supabase PostgreSQL plus the private Hugging Face bucket mounted at `/app/backend/data` for durable use. The bucket is mounted on the live Space. The default Space filesystem is ephemeral. No Hugging Face access token is required for injected Secrets.
 

@@ -4,6 +4,7 @@ import base64
 import binascii
 import io
 import ipaddress
+import json
 import os
 import re
 import socket
@@ -169,8 +170,14 @@ async def request_images(url, key, source, body, *, edit=False):
             async with session.post(url.rstrip('/') + ('/images/edits' if edit else '/images/generations'), json=body,
                                     headers={'Authorization': 'Bearer ' + credential}) as response:
                 if response.status >= 300:
+                    if response.status == 503:
+                        try:
+                            error = json.loads(await response.content.read(8192)).get('error')
+                        except (ValueError, UnicodeDecodeError, AttributeError, TypeError):
+                            error = None
+                        if isinstance(error, dict) and error.get('code') == 'no_healthy_sellers':
+                            raise HTTPException(503, 'No healthy Surplus sellers are available for this image model right now. Choose another model or retry later.')
                     raise HTTPException(response.status, provider_error(response.status))
-                import json
                 result = json.loads(await bounded_read(response, MAX_JSON_BYTES))
         items = result.get('data')
         if not isinstance(items, list) or not 1 <= len(items) <= body.get('n', 1):
