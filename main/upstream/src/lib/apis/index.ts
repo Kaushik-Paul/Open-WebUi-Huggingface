@@ -1500,13 +1500,14 @@ export const getBackendConfig = async () => {
 	return res;
 };
 
-export const getChangelog = async () => {
+export const getChangelog = async (token: string) => {
 	let error = null;
 
 	const res = await fetch(`${WEBUI_BASE_URL}/api/changelog`, {
 		method: 'GET',
 		headers: {
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
 		}
 	})
 		.then(async (res) => {

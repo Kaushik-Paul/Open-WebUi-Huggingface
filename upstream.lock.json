@@ -16,8 +16,13 @@
     "src/app.html",
     "src/lib/apis/auths/index.ts",
     "src/lib/apis/images/index.ts",
+    "src/lib/apis/index.ts",
     "src/lib/components/AddConnectionModal.svelte",
+    "src/lib/components/ChangelogModal.svelte",
     "src/lib/components/admin/Settings/Images.svelte",
+    "src/lib/components/common/Image.svelte",
+    "src/lib/components/layout/Sidebar.svelte",
+    "src/lib/components/layout/Sidebar/UserMenu.svelte",
     "src/routes/+layout.svelte",
     "src/routes/auth/+page.svelte"
   ],

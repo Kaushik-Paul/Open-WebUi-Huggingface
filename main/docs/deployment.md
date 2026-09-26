@@ -2,7 +2,7 @@
 
 ## Runtime contract
 
-The root Dockerfile compiles the vendored Svelte frontend and runs only the vendored Python backend. It uses Node 22.19.0, Python 3.11.13, upstream package-lock/requirements, CPU Torch, UID/GID 1000, port 7860, and one Uvicorn worker. No Ollama or CUDA service is included. `main/scripts/entrypoint.sh` validates configuration and execs the server. Migrations and the native admin bootstrap finish before traffic is accepted. An existing database must contain exactly the configured owner with the admin role.
+The root Dockerfile copies the locally built Svelte frontend and runs only the vendored Python backend. Frontend builds use Node 22.19.0; the runtime uses Python 3.11.13, upstream requirements, CPU Torch, UID/GID 1000, port 7860, and one Uvicorn worker. No Ollama or CUDA service is included. `main/scripts/entrypoint.sh` validates configuration and execs the server. Migrations and the native admin bootstrap finish before traffic is accepted. An existing database must contain exactly the configured owner with the admin role.
 
 Authentication, password login, disabled signup, disabled LDAP/OAuth/trusted headers, and disabled Direct Connections are deployment policy. Persisted settings/API writes cannot relax that policy. Unrelated settings remain persistent. The reverse proxy's forwarded identity/IP headers are not trusted; the login limiter also has a global bound. Use a stable signing secret. Never pass real secrets as Docker build arguments.
 
@@ -24,24 +24,17 @@ Backups contain private chats and configuration; restrict access. Test restorati
 
 ## Durable Spaces configuration
 
-Space container storage is ephemeral. Current Hugging Face documentation describes attached bucket volumes; do not assume a paid subscription supplies a POSIX filesystem suitable for SQLite. See [official storage guidance](https://huggingface.co/docs/hub/spaces-storage) and [Docker Spaces](https://huggingface.co/docs/hub/spaces-sdks-docker).
+The Space container disk is ephemeral. Chats, owner settings, and file metadata belong in PostgreSQL; uploaded and generated image bytes belong in durable file storage. A private Hugging Face bucket named `kaushikpaul/open-webui-surplus-data` was created for this project, but is not attached to the live Space yet. Do not place the active SQLite file on a bucket mount: SQLite warns that network filesystem sync and locking can corrupt a database. [Hugging Face bucket volumes](https://huggingface.co/docs/hub/spaces-storage) and [SQLite's network filesystem guidance](https://www.sqlite.org/useovernet.html) explain the tradeoff.
 
-Use `DATABASE_URL` for an external PostgreSQL database and upstream S3 storage for uploads/generated images:
+For this one-worker Space, use the Supabase **Session pooler** connection string on port 5432. The owner should set it as a Space Secret named `DATABASE_URL`, with its database password filled in and `sslmode=require` in the URL. Keep the URL out of Git, logs, and chat. Supabase documents the pooler URL and SSL setting in its [connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres). Preserve the existing `WEBUI_SECRET_KEY` and owner email/password Secrets when moving to PostgreSQL.
 
-```dotenv
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-STORAGE_PROVIDER=s3
-S3_BUCKET_NAME=your-private-bucket
-S3_REGION_NAME=your-region
-S3_ENDPOINT_URL=https://your-s3-compatible-endpoint
-S3_ACCESS_KEY_ID=your-access-key
-S3_SECRET_ACCESS_KEY=your-secret-key
-S3_KEY_PREFIX=open-webui/
-```
+Once the database is ready, attach the private bucket as a **read-write** Space volume at `/app/backend/data`. This uses Open WebUI's existing upload path without S3 access keys. The default `DATA_DIR` and UID 1000 must be able to write there. Keep one app worker. Verify startup migrations, owner login, chat save/reload, image generation, file download, and a Space restart before calling it durable.
 
-Supply credential-bearing values through Space Secrets, require TLS according to the database provider's connection instructions, and keep the bucket private. The native authenticated file-content API retrieves stored files; do not publish private uploads to support edits. External PostgreSQL alone does not preserve image bytes. Bucket/FUSE mounts are not accepted SQLite storage unless locking/atomic writes are explicitly verified. Ephemeral SQLite is demo mode only.
+Before changing `DATABASE_URL` or attaching a volume, export or back up any existing data from the current Space. Its SQLite database and uploads are on ephemeral disk and will not migrate automatically. An empty new PostgreSQL database will create a fresh owner from the configured Secrets. If existing data must be retained, migrate that database and its uploads together from a consistent backup.
 
-Set `WEBUI_URL=https://YOUR-SPACE.hf.space` and `WEBUI_AUTH_COOKIE_SECURE=true`. Test the actual origin's cookies/localStorage, SSE through the Space proxy, Socket.IO reconnect, and UID permissions. `main/scripts/deploy_space.py` creates or updates the Docker Space, builds the frontend locally, uploads Git-visible files plus `main/frontend-dist`, and applies `.env` as Secrets/Variables without printing values. Hugging Face `cpu-basic` builders OOM on the in-cluster Vite build; the uploaded dist skips that step. The script does not provision PostgreSQL, object storage, or paid hardware. Space disk remains ephemeral until those are configured.
+A fresh deployment needs the Surplus chat and image variables from root `.env.example`, including `PROVIDER_SECRET_NAMES`, `OPENAI_API_CONFIGS`, `DEFAULT_MODELS`, the independent image source/key/model settings, and `ENABLE_IMAGE_GENERATION=true`. Set `WEBUI_URL` to the `.hf.space` origin, `WEBUI_AUTH_COOKIE_SECURE=true`, and `WEBUI_AUTH_COOKIE_SAME_SITE=none` for the cross-site Hugging Face iframe. The frontend also uses bearer-authenticated fetches for private generated images, since browser policies may still block third-party cookies.
+
+`main/scripts/deploy_space.py` remains the sole code upload path. It builds the frontend locally, uploads Git-visible files plus `main/frontend-dist`, and reads `.env` with `python-dotenv` without printing values. A partial `.env` can supply `SURPLUS_API_KEY` and `SUPABASE_DATABASE_PASSWORD` while the existing owner Secrets remain in Space settings. The helper assembles the Supabase URL with an encoded password and `sslmode=require`; `--attach-bucket` mounts the private bucket once that database Secret is available. Its safe Surplus defaults select `deepseek-v4-flash-0731` and `venice-z-image-turbo` on a fresh database. Do not deploy code or change Space variables before preserving any existing Space data. The script does not provision PostgreSQL or paid hardware.
 
 ## Password recovery and sessions
 
