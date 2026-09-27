@@ -1,48 +1,165 @@
----
-title: Open WebUI for Surplus
-emoji: 💬
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # Open WebUI on Hugging Face Spaces
 
-The actual Open WebUI v0.11.3 application, customized for one owner and Surplus text/image APIs. The same Docker image runs locally and in a Docker Space. Upstream branding and licenses are retained in `main/upstream/`.
+A private, single-owner deployment of [Open WebUI](https://github.com/open-webui/open-webui) **v0.11.3**, wired to [Surplus](https://www.surplusintelligence.ai/) for chat and image generation. The same Docker image runs locally and on a Hugging Face Docker Space. Upstream branding, notices, and licenses stay in `main/upstream/`.
 
-Local login, remembered credentials, secret-name API keys, Surplus chat, and Surplus image generation/editing are implemented. The Space uses Supabase PostgreSQL for chats/settings and a private Hugging Face bucket for uploaded and generated files. Deployment decisions and selected models are in [doubts.md](doubts.md). Authenticated live save/reload after a Space restart remains an owner acceptance check.
+The Space is private. Signup, public onboarding, Direct Connections, OAuth, LDAP, and trusted-header login stay off. One configured admin owns the instance.
+
+---
+
+## What this deployment adds
+
+| Area | Behavior |
+|---|---|
+| **Access** | Native login for one owner. Persisted settings cannot turn signup back on or disable the login form. |
+| **Chat** | OpenAI-compatible Surplus connection. The browser stores the secret **name** `SURPLUS_API_KEY`; the server resolves the key on each outbound request. |
+| **Images** | Independent generation and edit settings, Surplus JSON edits, and private native file storage for results. |
+| **Remembered login** | The login page can keep the email and password in this browser. See [Remembered login](#remembered-login). |
+| **Local data** | A Docker named volume keeps accounts, chats, settings, uploads, and generated images across container recreation. |
+| **Space data** | Supabase PostgreSQL holds chats and settings. A private Hugging Face bucket holds uploaded and generated files. |
+
+The application pin, archive checksum, and customization inventory are in [`upstream.lock.json`](upstream.lock.json).
+
+---
+
+## Repository layout
+
+```text
+README.md                   This guide
+LICENCE                     MIT license for this project's customizations
+Dockerfile                  Runtime image (Python backend + prebuilt frontend)
+compose.yaml                Local service and durable named volume
+.env.example                Owner, Surplus, and image defaults
+upstream.lock.json          Pinned Open WebUI release and changed files
+main/
+  upstream/                 Vendored Open WebUI v0.11.3 source
+  frontend-dist/            Production Svelte build consumed by the image
+  scripts/                  Entrypoint, deploy, checks, and owner-password reset
+  tests/                    Existing regression suite
+  docs/                     Surplus, deployment, customization, and verification
+```
+
+`main/frontend-dist` is produced locally and stays out of Git. The image copies that directory in as the finished frontend.
+
+---
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` **only if you do not already have a `.env`**. For an existing file, merge the missing entries and keep your `SURPLUS_API_KEY`.
-2. Set `WEBUI_ADMIN_EMAIL`, a unique `WEBUI_ADMIN_PASSWORD` (12+ characters), and a random, stable `WEBUI_SECRET_KEY` (32+ characters). Generate the signing key with `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`.
-3. Set `SURPLUS_API_KEY` and `PROVIDER_SECRET_NAMES=SURPLUS_API_KEY`. Copy the connection defaults from the example; `OPENAI_API_KEY=SURPLUS_API_KEY` is the **reference**, not your key's value.
-4. Run `docker compose up --build` and open **http://localhost:7860**. First build downloads the full upstream dependencies and can take several minutes. Startup fails if owner configuration is missing.
-5. Log in with the configured owner. In **Admin Panel → Settings → Connections**, verify the Surplus connection. In **Settings → Images**, choose OpenAI, Surplus compatibility, Secret name, `SURPLUS_API_KEY`, and a current image model; then enable generation. Editing has its own model and credentials.
+1. Copy `.env.example` to `.env` when that file does not already exist. When `.env` already exists, add any missing keys and keep the current `SURPLUS_API_KEY`.
+2. Set `WEBUI_ADMIN_EMAIL`, a unique `WEBUI_ADMIN_PASSWORD` of at least 12 characters, and a stable `WEBUI_SECRET_KEY` of at least 32 characters:
 
-The local named volume preserves accounts, chats, settings, uploads, and generated images across container recreation. Do not run `docker compose down -v` unless you intend to erase that data.
+   ```sh
+   python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+   ```
 
-“Remember me on this browser” is enabled by default and stores your email **and raw password** in localStorage, as requested. Same-origin JavaScript and anyone with access to the browser profile can read it. Opt out on shared devices. Logout clears it across tabs. Provider secret values stay on the server.
+3. Set `SURPLUS_API_KEY` and `PROVIDER_SECRET_NAMES=SURPLUS_API_KEY`. In the connection defaults, `OPENAI_API_KEY=SURPLUS_API_KEY` is the environment **name** the server resolves on each request.
+4. Build the frontend into `main/frontend-dist` when `main/frontend-dist/index.html` is missing, or after UI changes. `python3 main/scripts/deploy_space.py` builds it before an upload. `--dry-run` only lists the upload set.
+5. Start the app:
 
-Changing `WEBUI_ADMIN_PASSWORD` does not reset an existing account. While logged in, use native Account settings. Offline recovery: stop the service, back up data, then `docker compose run --rm --entrypoint python webui /app/scripts/reset_owner_password.py`. Rotate `WEBUI_SECRET_KEY` afterward to invalidate existing sessions.
+   ```sh
+   docker compose up --build
+   ```
 
-## Spaces
+   Open <http://localhost:7860>. The first image build downloads the upstream Python dependencies and can take several minutes. Startup stops when the owner email, password, or signing key is missing.
 
-The authenticated `hf` CLI plus `python-dotenv` are used by the helper. It creates a **private** Docker Space by default, uploads Git-visible files (never `.env`), and copies owner configuration from the local `.env` into Space Secrets and Variables without printing values. An existing Space can keep owner Secrets already set there while a partial local `.env` supplies `SURPLUS_API_KEY` and `SUPABASE_DATABASE_PASSWORD`. It sets `WEBUI_URL` to the Space origin.
+6. Sign in as the configured owner. In **Admin Panel → Settings → Connections**, confirm the Surplus base URL `https://api.surplusintelligence.ai/v1`, **Secret name**, and `SURPLUS_API_KEY`. In **Settings → Images**, choose OpenAI, Surplus compatibility, the same secret name, and a current image model, then enable generation. Editing uses its own model and credentials.
+
+The `webui-data` volume is the local database and file store. `docker compose down -v` deletes it.
+
+---
+
+## Remembered login
+
+**Remember me on this browser** is on by default. A successful login saves the email and the password in `localStorage`. Same-origin scripts and anyone with access to that browser profile can read it. Leave it unchecked on a shared device.
+
+Logout clears the saved record in other tabs of this browser. A wrong password removes the saved record. Changing the account password clears it as well. Provider keys stay on the server and are not written into the browser, exports, or logs.
+
+---
+
+## Configuration
+
+Values live in the root `.env` locally and in Space Secrets or Variables when deployed. Placeholder values from `.env.example` are skipped.
+
+| Variable | Role |
+|---|---|
+| `WEBUI_ADMIN_EMAIL` | Owner account created on first startup |
+| `WEBUI_ADMIN_PASSWORD` | Initial owner password (12+ characters). Later changes do not reset an existing account |
+| `WEBUI_SECRET_KEY` | JWT signing secret (32+ characters). Keep it stable across restarts |
+| `SURPLUS_API_KEY` | Server-side Surplus key. The only allowed secret reference |
+| `PROVIDER_SECRET_NAMES` | Must include `SURPLUS_API_KEY` |
+| `OPENAI_API_BASE_URL` | `https://api.surplusintelligence.ai/v1` |
+| `OPENAI_API_KEY` | Set to the name `SURPLUS_API_KEY` when the connection uses secret mode |
+| `DEFAULT_MODELS` | Initial chat model. The deploy default is `deepseek-v4-flash-0731` |
+| `IMAGE_GENERATION_MODEL` | Initial image model. The deploy default is `venice-z-image-turbo` |
+| `WEBUI_URL` | `http://localhost:7860` locally. The deploy helper sets the Space origin |
+| `DATABASE_URL` | Supabase Session pooler URL for the Space. Local Compose uses the volume's SQLite database |
+
+Image generation and image editing each have their own base URL, key source, and model. Details and live compatibility notes are in [Surplus setup](main/docs/surplus.md).
+
+---
+
+## Storage
+
+**Local.** Compose mounts `webui-data` at `/app/backend/data`. Accounts, chats, settings, uploads, and generated images survive `docker compose up --build` and container recreation. Stop the service before taking a backup. Restore both the database and the files from the same point in time. The procedure is in [deployment and recovery](main/docs/deployment.md).
+
+**Space.** The Space disk is ephemeral. Chats, the owner account, and settings use Supabase PostgreSQL. Uploaded and generated files use the private bucket `kaushikpaul/open-webui-surplus-data`, mounted read-write at `/app/backend/data`. The active database stays on Postgres; the bucket is for files. Keep a single Uvicorn worker.
+
+---
+
+## Deployment
+
+Deploy only with `main/scripts/deploy_space.py`. The Hugging Face account must already be logged in (`hf auth login` or `HF_TOKEN`), and the Python environment needs `huggingface_hub` and `python-dotenv`.
+
+The helper creates a **private** Docker Space, uploads Git-visible files plus `main/frontend-dist`, and copies owner settings from `.env` into Space Secrets and Variables. Logs show setting names only. The `.env` file stays local.
+
+Default Space id: `kaushikpaul/Open-WebUI-Surplus`, or `{hf-username}/Open-WebUI-Surplus`. Override it with `--repo-id` or `HF_SPACE_ID`. The runtime origin for that default id is <https://kaushikpaul-open-webui-surplus.hf.space>.
 
 ```sh
-# From an environment that has huggingface_hub, for example the hf CLI:
-#   /home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py
 python3 main/scripts/deploy_space.py --dry-run
-python3 main/scripts/deploy_space.py --attach-bucket  # applies Supabase URL from .env and mounts the bucket
-/home/kaushik/.hf-cli/venv/bin/python main/scripts/deploy_space.py --update --repo-id kaushikpaul/Open-WebUI-Surplus
-# For backend-only changes, add --skip-frontend-build to reuse the previous frontend.
+python3 main/scripts/deploy_space.py --attach-bucket
+python3 main/scripts/deploy_space.py --update --repo-id kaushikpaul/Open-WebUI-Surplus
 ```
 
-Install `python-dotenv` in the Python environment used for deployment (for example, `python -m pip install python-dotenv`); keep the password in `.env`. The helper rebuilds the Svelte frontend from current source by default, then uploads `main/frontend-dist` so Hugging Face does not run the memory-heavy Vite build. `--update` uploads code to the existing Space without reading `.env` or changing Secrets, Variables, hardware, visibility, or bucket mounts. Use `--skip-frontend-build` only for backend or documentation changes. Local `docker compose` also uses `main/frontend-dist`; rebuild it after UI changes before building the Docker image.
+| Flag | Effect |
+|---|---|
+| `--dry-run` | Lists the upload set and setting names. Does not build the frontend or change the Space |
+| `--attach-bucket` | Writes `DATABASE_URL` from the local Supabase password and mounts the private bucket |
+| `--update` | Uploads code to an existing Space. Leaves Secrets, Variables, hardware, visibility, and the bucket mount as they are |
+| `--skip-frontend-build` | Reuses the current `main/frontend-dist`. Use it for backend or documentation changes |
+| `--skip-env` | Uploads code and does not read `.env` |
 
-Default Space: `kaushikpaul/Open-WebUI-Surplus` (override with `--repo-id` or `HF_SPACE_ID`). Use Supabase PostgreSQL plus the private Hugging Face bucket mounted at `/app/backend/data` for durable use. The bucket is mounted on the live Space. The default Space filesystem is ephemeral. No Hugging Face access token is required for injected Secrets.
+`--update` implies `--skip-env`. Rebuild the frontend for UI changes; `--skip-frontend-build` is for backend or documentation changes. A fresh database receives the Surplus chat and image defaults from the helper, including `deepseek-v4-flash-0731` and `venice-z-image-turbo`.
 
-See [deployment and recovery](main/docs/deployment.md), [Surplus setup](main/docs/surplus.md), [customizations and upgrades](main/docs/customization.md), [request-path audit](main/docs/request-path-audit.md), and [verification results](main/docs/verification.md). Agent/maintainer rules, including when not to add tests, are in [AGENTS.md](AGENTS.md).
+For the cross-site Hugging Face frame, the helper sets `WEBUI_URL` to the Space origin, `WEBUI_AUTH_COOKIE_SECURE=true`, and `WEBUI_AUTH_COOKIE_SAME_SITE=none`. Private generated images are also loaded with the bearer token.
+
+---
+
+## Password recovery
+
+While signed in, change the password in the native account settings. `WEBUI_ADMIN_PASSWORD` applies only when the owner account is first created.
+
+To reset a local account offline, stop the service, back up the data volume, then:
+
+```sh
+docker compose run --rm --entrypoint python webui /app/scripts/reset_owner_password.py
+```
+
+Set a new random `WEBUI_SECRET_KEY` afterward and recreate the container. Signing-key rotation invalidates existing JWTs. Revoking those tokens on logout itself requires Redis. Clear the remembered browser password after recovery.
+
+---
+
+## Further reading
+
+- [Deployment, persistence, and recovery](main/docs/deployment.md)
+- [Surplus setup and compatibility](main/docs/surplus.md)
+- [Customizations and upstream upgrades](main/docs/customization.md)
+- [Request-path audit](main/docs/request-path-audit.md)
+- [Verification results](main/docs/verification.md)
+- [Maintainer rules](AGENTS.md)
+
+---
+
+## License
+
+This project is available under the [MIT License](LICENCE).
+
+Open WebUI v0.11.3 in `main/upstream/` remains under its own [license](main/upstream/LICENSE). Its [license notice](main/upstream/LICENSE_NOTICE), branding, and copyright notices are retained.
