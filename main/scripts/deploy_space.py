@@ -11,6 +11,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import quote
@@ -104,6 +105,16 @@ def frontend_dist_files() -> list[str]:
     return files
 
 
+def ensure_dotenv() -> None:
+    try:
+        import dotenv  # noqa: F401
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            'python-dotenv is missing from this Python '
+            f'({sys.executable}). Install it there, then rerun. The frontend build was not started.'
+        ) from exc
+
+
 def build_frontend_dist() -> None:
     print('Building frontend from current source so the Hugging Face builder can skip Vite')
     source_dir = PROJECT_ROOT / 'main/upstream'
@@ -117,7 +128,7 @@ def build_frontend_dist() -> None:
     install_step = '' if use_installed else 'npm ci --force && '
     print('Reusing installed Node dependencies' if use_installed else 'Installing Node dependencies')
     with tempfile.TemporaryDirectory(prefix='owui-frontend-build-') as build_dir:
-        subprocess.run(
+        result = subprocess.run(
             [
                 'docker', 'run', '--rm', '--name', 'owui-hf-frontend-build',
                 '-v', f'{PROJECT_ROOT / "main/upstream"}:/src:ro',
@@ -129,8 +140,16 @@ def build_frontend_dist() -> None:
                 'sh', '-c',
                 f'cp -a /src/. /app/ && {install_step}npm run build && cp -a /app/build/. /out/ && chown -R {os.getuid()}:{os.getgid()} /out/',
             ],
-            check=True,
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            output = '\n'.join(part for part in (result.stdout, result.stderr) if part).strip()
+            tail = '\n'.join(output.splitlines()[-40:])
+            if tail:
+                print(tail)
+            raise SystemExit(f'Frontend build failed (exit {result.returncode})')
+        print('Frontend build finished')
         built = Path(build_dir)
         if not (built / 'index.html').is_file():
             raise SystemExit('Frontend build did not produce index.html')
@@ -263,6 +282,8 @@ def main() -> None:
         if args.public or args.hardware or args.attach_bucket:
             raise SystemExit('--update cannot change visibility, hardware, or bucket mounts')
         args.skip_env = True
+    if not args.skip_env:
+        ensure_dotenv()
     if not args.dry_run and not args.skip_frontend_build:
         build_frontend_dist()
     elif not args.dry_run and not (FRONTEND_DIST / 'index.html').is_file():
