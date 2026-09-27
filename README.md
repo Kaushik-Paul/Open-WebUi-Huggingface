@@ -2,6 +2,8 @@
 
 A private, single-owner deployment of [Open WebUI](https://github.com/open-webui/open-webui) **v0.11.3**, wired to [Surplus](https://www.surplusintelligence.ai/) for chat and image generation. The same Docker image runs locally and on a Hugging Face Docker Space. Upstream branding, notices, and licenses stay in `main/upstream/`.
 
+The live app is at [openweb.pp.ua](https://www.openweb.pp.ua/). The Hugging Face deployment is [kaushikpaul/Open-WebUI-Surplus](https://huggingface.co/spaces/kaushikpaul/Open-WebUI-Surplus).
+
 The Space is private. Signup, public onboarding, Direct Connections, OAuth, LDAP, and trusted-header login stay off. One configured admin owns the instance.
 
 ---
@@ -111,7 +113,15 @@ Deploy only with `main/scripts/deploy_space.py`. The Hugging Face account must a
 
 The helper creates a **private** Docker Space, uploads Git-visible files plus `main/frontend-dist`, and copies owner settings from `.env` into Space Secrets and Variables. Logs show setting names only. The `.env` file stays local.
 
-Default Space id: `kaushikpaul/Open-WebUI-Surplus`, or `{hf-username}/Open-WebUI-Surplus`. Override it with `--repo-id` or `HF_SPACE_ID`. The runtime origin for that default id is <https://kaushikpaul-open-webui-surplus.hf.space>.
+Default Space id: `kaushikpaul/Open-WebUI-Surplus`, or `{hf-username}/Open-WebUI-Surplus`. Override it with `--repo-id` or `HF_SPACE_ID`.
+
+| | |
+|---|---|
+| **App** | [https://www.openweb.pp.ua/](https://www.openweb.pp.ua/) |
+| **Space** | [kaushikpaul/Open-WebUI-Surplus](https://huggingface.co/spaces/kaushikpaul/Open-WebUI-Surplus) |
+| **Space origin** | [https://kaushikpaul-open-webui-surplus.hf.space](https://kaushikpaul-open-webui-surplus.hf.space) |
+
+The deploy helper sets `WEBUI_URL` to that Space origin.
 
 ```sh
 python3 main/scripts/deploy_space.py --dry-run
