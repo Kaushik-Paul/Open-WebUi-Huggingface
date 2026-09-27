@@ -109,7 +109,7 @@ Image generation and image editing each have their own base URL, key source, and
 
 ## Deployment
 
-Deploy only with `main/scripts/deploy_space.py`. The Hugging Face account must already be logged in (`hf auth login` or `HF_TOKEN`), and the Python environment needs `huggingface_hub` and `python-dotenv`.
+Deploy only with `main/scripts/deploy_space.py`. The Hugging Face account must already be logged in (`hf auth login` or `HF_TOKEN`), and the Python environment needs `huggingface_hub` and `python-dotenv`. A missing `python-dotenv` stops the deploy before the frontend build.
 
 The helper creates a **private** Docker Space, uploads Git-visible files plus `main/frontend-dist`, and copies owner settings from `.env` into Space Secrets and Variables. Logs show setting names only. The `.env` file stays local.
 

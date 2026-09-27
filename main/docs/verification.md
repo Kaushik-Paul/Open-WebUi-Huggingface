@@ -59,3 +59,8 @@ Authenticated live owner chat, image generation and download, and save/reload ac
 
 - Added `--update` to the existing `deploy_space.py` for code-only updates to an existing Space. It skips `.env` reads, Secret/Variable writes, repo creation, and bucket/hardware/visibility changes. An update-mode dry run targeted `kaushikpaul/Open-WebUI-Surplus` and listed 10,689 files (344.9 MiB), with no `.env` path and no Secrets or Variables to apply. The target Space was read-only checked and existed at revision `ac8f926f3babf89198b7d2f46f9b0704c46ceba3`.
 - The frontend build no longer copies a potentially stale Docker image. It built the current source successfully using the matching installed Node dependencies; Vite reported a successful production build in 2m 34s, and `main/frontend-dist/index.html` was refreshed. The first verification attempt used a clean `npm ci`; it completed installation, but the temporary build container was stopped during Vite compilation to avoid repeating a six-minute dependency install. Python compilation and `git diff --check` passed. No Space upload was performed for this helper-only change.
+
+## Deploy log follow-up — 2026-09-27
+
+- A full `deploy_space.py` run with `/home/kaushik/.hf-cli/venv/bin/python` completed the frontend build, then stopped with `ModuleNotFoundError: No module named 'dotenv'` before any Space upload. The Svelte and Vite lines in that log are warnings from a successful production build.
+- The helper now checks for `python-dotenv` before starting that build, and it prints a short frontend status line. A failed build prints the last 40 lines of the Vite log. This follow-up did not rerun the Docker frontend build or upload to the Space.
